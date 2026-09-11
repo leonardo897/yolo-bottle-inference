@@ -1,8 +1,10 @@
 import asyncio
 import base64
 import io
+import json
 import subprocess
 import time
+import uuid
 
 import cv2
 import httpx
@@ -20,9 +22,6 @@ from schemas import (
     PredictRequest,
     PredictResponse,
 )
-
-import json
-import uuid
 
 
 def log_event(event: str, level: str = "INFO", **kwargs):
