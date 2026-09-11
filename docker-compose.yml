@@ -1,6 +1,6 @@
 services:
   yolo-api:
-    image: ghcr.io/andrelucas23/yolo-bottle-inference/yolo-api:latest
+    image: ghcr.io/leonardo897/yolo-bottle-inference/yolo-api:latest
     build:
       context: .
       dockerfile: Dockerfile.api
