@@ -31,11 +31,9 @@ echo "[INFO] Imagem atual: $PREVIOUS"
 # ── Baixa a nova imagem ──────────────────────────────────────
 echo "[1/4] Baixando nova imagem..."
 docker compose pull
-
-
-# ── Sobe a nova versão ───────────────────────────────────────
+python3 -m dvc pull models/yolo-epi.pt
 echo "[2/4] Iniciando nova versão..."
-docker compose up -d
+docker compose up -d --build
 
 
 # ── Aguarda o serviço estabilizar ────────────────────────────
