@@ -124,4 +124,8 @@ Com os containers rodando, a API fica em `http://localhost:8000`, com a document
 
 ## Onde estamos agora
 
+<<<<<<< Updated upstream
 A API e o pipeline de inferência já estão funcionando com o modelo genérico (`yolov8n.pt`). Já fotografamos os recipientes de duas das classes, sem defeito e tampa ausente, e estamos anotando esse dataset no Roboflow para treinar o modelo customizado. Faltam a outra classe (corpo deformado), o treino do modelo final, e a camada de alerta local e MQTT, que ainda não tem código escrito.
+=======
+A API e o pipeline de inferência já estão funcionando com o modelo genérico (`yolov8n.pt`). Já fotografamos os recipientes de duas das classes, sem defeito e tampa ausente, e estamos anotando esse dataset no Roboflow para treinar o modelo customizado. Faltam a outra classe (corpo deformado), o treino do modelo final, e a camada de alerta local e MQTT, que ainda não tem código escrito.
+>>>>>>> Stashed changes
