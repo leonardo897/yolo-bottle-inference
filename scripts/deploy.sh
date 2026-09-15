@@ -3,7 +3,7 @@
 # Executa no Raspberry Pi via SSH pelo pipeline de CI/CD.
 # Faz pull da nova imagem, reinicia o serviço e valida o health check.
 # Em caso de falha, reverte para a imagem anterior automaticamente.
-
+export PATH="$HOME/.local/bin:$PATH"
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ echo "[INFO] Imagem atual: $PREVIOUS"
 # ── Baixa a nova imagem ──────────────────────────────────────
 echo "[1/4] Baixando nova imagem..."
 docker compose pull
-python3 -m dvc pull models/yolo-epi.pt
+dvc pull models/yolo-epi.pt
 echo "[2/4] Iniciando nova versão..."
 docker compose up -d --build
 
