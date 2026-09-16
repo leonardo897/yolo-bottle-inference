@@ -1,131 +1,209 @@
-# Detecção de Anomalias Estruturais em Recipientes em Linhas de Envase
+# Detecção de anomalias em garrafas
 
-Somos o Grupo Git Push. Este é o README inicial do nosso Trabalho de Conclusão da Capacitação (PNAAT). Aqui o problema que estamos resolvendo, como implementamos a arquitetura, do que o projeto depende e como rodar.
+Projeto de visão computacional do Grupo Git Push para identificar anomalias estruturais em garrafas em uma linha de envase. A solução usa um modelo YOLO executado por uma API FastAPI. O script `scripts/detector_garrafas.py` consulta essa API continuamente e aciona um LED e um buzzer quando encontra uma classe de anomalia.
 
-## Sumário
+![Diagrama da arquitetura](docs/diagrama_arquitetura.png)
 
-- [O problema que estamos resolvendo](#o-problema-que-estamos-resolvendo)
-- [Como implementamos a arquitetura](#como-implementamos-a-arquitetura)
-- [O que já está implementado](#o-que-já-está-implementado)
-- [Do que precisa para executar](#Do-que-precisa-para-executar)
-- [Estrutura do repositório](#estrutura-do-repositório)
-- [Como rodar](#como-rodar)
-- [Onde estamos agora](#onde-estamos-agora)
+## Visão geral
 
-## O problema que estamos resolvendo
+O fluxo de execução é:
 
-Em uma linha de envase rápido, garrafas e recipientes com anomalias estruturais (ausência de tampa, tampa mal rosqueada, corpo deformado) continuam passando pela esteira sem nenhuma verificação automatizada, até travarem o maquinário, derramarem líquido ou comprometerem um lote inteiro. Nossa ideia é detectar essas anomalias em tempo real, antes do recipiente chegar ao empacotamento, e sinalizar o problema para o operador intervir. Não pretendemos remover fisicamente a peça nem parar a esteira sozinhos, isso continua manual, é uma escolha de escopo, não uma limitação técnica.
+1. Uma câmera CSI ou USB conectada ao Raspberry Pi captura a imagem.
+2. O container `yolo-api` recebe a imagem, aplica o pré-processamento e executa a inferência YOLO.
+3. O endpoint `POST /predict/camera` devolve as detecções em JSON.
+4. `detector_garrafas.py` filtra as classes de interesse e, quando necessário, liga o LED e o buzzer no GPIO 18.
 
-## Como implementamos a arquitetura
+As classes que acionam o alarme são `Garrafa amassada`, `Tampa incorreta` e `Tampa ausente`. O limiar de confiança padrão do detector é `0.3`.
 
-Escolhemos uma abordagem predominantemente de visão computacional, porque as três anomalias que definimos são identificáveis numa única captura de imagem, sem precisar de um sensor dedicado por tipo de defeito. É assim que pensamos o fluxo completo:
+## Componentes
 
-![](docs/diagrama-arquitetura.png)
+- Raspberry Pi 5 ou equipamento compatível para executar a API e acessar a câmera.
+- Câmera CSI ou USB.
+- LED e buzzer ligados ao GPIO 18, com o circuito elétrico apropriado.
+- Docker e Docker Compose.
+- Git e DVC, para obter o código e o modelo versionado.
+- Python 3.11 ou superior no equipamento que executará o detector.
 
-Explicação: a entrada é a câmera capturando os recipientes, via CSI ou USB. O processamento acontece no Raspberry Pi 5, que roda a inferência YOLO sobre cada frame. O resultado sai de duas formas hoje, como resposta JSON com as detecções, ou como vídeo anotado ao vivo pelo stream. A sinalização local e o alerta MQTT para o painel gerencial são a camada de IoT prevista na proposta, que liga a detecção da visão computacional a uma reação prática na linha.
+O modelo utilizado pela execução final é `yolo-epi.pt`. O arquivo não fica armazenado diretamente no Git: `models/yolo-epi.pt.dvc` é um ponteiro DVC que baixa o peso para `models/yolo-epi.pt`.
 
-## O que já está implementado
+![Diagrama elétrico](docs/diagrama_eletrico.png)
 
-A API em FastAPI (`app/main.py`) já cobre boa parte de visão computacional. Os endpoints que já funcionam:
+## Estrutura principal
 
-- `GET /health`, verifica se a API está de pé e qual modelo está carregado.
-- `POST /predict`, roda a inferência numa imagem enviada em base64 ou por URL.
-- `GET /predict/camera` e `GET /predict/camera/image`, disparam uma captura da câmera do Raspberry Pi (CSI via `rpicam-still`, ou USB via OpenCV como alternativa) e retornam a detecção.
-- `POST /predict/batch`, roda a inferência em várias imagens de uma vez.
-- `GET /stream/camera` e `GET /stream/view`, transmitem vídeo contínuo da câmera com as detecções desenhadas em cada frame, direto no navegador.
-- `GET /metrics`, acompanha quantas inferências já rodaram e o tempo médio.
-
-O que ainda não está implementado é a camada de IoT, o acionamento do LED/buzzer e a publicação do alerta MQTT.
-
-Também já temos um pipeline de CI/CD (`.github/workflows/edge-deploy.yml`) que roda lint, testes, builda a imagem Docker para ARM64 e faz o deploy automático no Raspberry Pi 5 via SSH, com um portão de qualidade (`scripts/validate_model.py`) que bloqueia o deploy se o modelo treinado tiver mAP@0.5 abaixo de 0.50.
-
-## Do que precisa para executar
-
-**Hardware**
-- Câmera USB ou módulo CSI
-- Raspberry Pi 5, como unidade de processamento de borda
-- LED/buzzer para sinalização local 
-
-**Bibliotecas Python (API, em `app/requirements.txt`)**
-- fastapi
-- uvicorn
-- ultralytics, para o modelo YOLO
-- Pillow, numpy, opencv-python-headless, para manipulação de imagem
-- httpx
-
-**Instaladas direto no `Dockerfile.api` (fora do requirements.txt)**
-- torch e torchvision, versão CPU, dependências do ultralytics para rodar a inferência
-
-**Dependências de sistema (também no `Dockerfile.api`)**
-- rpicam-apps-lite, do repositório da Raspberry Pi Foundation, para a câmera CSI
-- libgl1, libglib2.0-0, libgomp1, bibliotecas exigidas pelo OpenCV e pelo PyTorch em tempo de execução
-
-**Bibliotecas Python (cliente de teste, em `client/requirements.txt`)**
-- httpx
-- Pillow
-
-**Ainda vamos adicionar**
-- Uma biblioteca de MQTT (tipo paho-mqtt), quando a camada de alerta for implementada
-
-**Plataformas e ferramentas**
-- Roboflow, para anotação do dataset
-- DVC, para versionar dataset e modelo treinado
-- Docker e Docker Compose, para empacotar API e cliente
-- Um broker MQTT (ainda vamos decidir qual, depende de como o painel gerencial for montado)
-- pytest, para os testes automatizados
-- ruff, para lint do código Python
-- GitHub Actions, para o pipeline de CI/CD (lint, testes, build da imagem e deploy)
-- Tailscale, para o pipeline de CI/CD alcançar o Raspberry Pi durante o deploy
-- GitHub Container Registry (GHCR), para hospedar a imagem Docker publicada
-
-## Estrutura do repositório
-
-```
+```text
 .
-├── README.md
-├── docker-compose.yml
-├── Dockerfile.api
-├── Dockerfile.client
-├── ruff.toml
-├── .github/
-│   └── workflows/
-│       └── edge-deploy.yml   # CI/CD: lint, testes, build ARM64, quality gate, deploy
 ├── app/
-│   ├── main.py           # endpoints da API, captura de câmera e streaming
-│   ├── model.py           # carregamento do modelo YOLO
-│   ├── schemas.py         # formatos de request/response da API
-│   └── requirements.txt
-├── client/
-│   ├── client.py          # script de teste que chama a API com imagens locais
-│   └── requirements.txt
+│   ├── main.py                 # API, captura da câmera e endpoints
+│   ├── model.py                # carregamento e cache dos modelos
+│   └── requirements.txt        # dependências da API
+├── client/                     # cliente de testes da API
 ├── models/
-│   └── yolov8n.pt.dvc     # ponteiro DVC do modelo, hoje ainda o genérico
+│   └── yolo-epi.pt.dvc         # ponteiro DVC do modelo final
+├── preprocessing/              # pré-processamento e ajuste das caixas
 ├── scripts/
-│   ├── deploy.sh           # reinicia o serviço no Raspberry Pi, com rollback automático
-│   └── validate_model.py   # quality gate: bloqueia deploy se o mAP@0.5 ficar abaixo do limiar
-├── tests/
-│   ├── test_api.py
-│   └── assets/
-└── docs/
-    └── diagrama-arquitetura.png
+│   └── detector_garrafas.py    # loop do alarme local
+├── stream/                     # streaming MJPEG e variações de captura
+├── tests/                      # testes automatizados
+├── docker-compose.yml          # serviços da API, cliente e stream
+├── Dockerfile.api
+└── Dockerfile.client
 ```
 
+## API disponível
 
-## Como rodar
+Com a API em execução, os endereços principais são:
+
+- `GET /health`: verifica se a API está disponível e se o modelo padrão foi carregado.
+- `POST /predict/camera`: captura uma imagem e retorna as detecções em JSON.
+- `GET /predict/camera/image`: captura uma imagem e retorna a versão anotada.
+- `POST /predict`: executa inferência em uma imagem enviada em base64 ou por URL.
+- `GET /stream/view`: exibe o stream anotado no navegador.
+- `GET /metrics`: exibe as métricas de inferência.
+- `GET /docs`: abre a documentação interativa do FastAPI.
+
+O serviço usa `yolo-epi.pt` por padrão no Compose, expõe a porta `8000` e monta a pasta `models` como somente leitura. A captura CSI usa `rpicam-still`; para câmeras USB, a API tenta usar OpenCV como alternativa.
+
+## Aquisição e execução completa
+
+Os passos abaixo partem de uma máquina nova e terminam com a execução do detector.
+
+### 1. Obter o repositório
 
 ```bash
-git clone https://github.com/leonardo897/yolo-bottle-inference
+git clone https://github.com/leonardo897/yolo-bottle-inference.git
 cd yolo-bottle-inference
-dvc pull                     # baixa o modelo
-docker compose up --build
 ```
 
-Com os containers rodando, a API fica em `http://localhost:8000`, com a documentação interativa em `http://localhost:8000/docs` e o stream ao vivo em `http://localhost:8000/stream/view`.
+Para conferir o código obtido:
 
-## Onde estamos agora
+```bash
+git status
+```
 
-<<<<<<< Updated upstream
-A API e o pipeline de inferência já estão funcionando com o modelo genérico (`yolov8n.pt`). Já fotografamos os recipientes de duas das classes, sem defeito e tampa ausente, e estamos anotando esse dataset no Roboflow para treinar o modelo customizado. Faltam a outra classe (corpo deformado), o treino do modelo final, e a camada de alerta local e MQTT, que ainda não tem código escrito.
-=======
-A API e o pipeline de inferência já estão funcionando com o modelo genérico (`yolov8n.pt`). Já fotografamos os recipientes de duas das classes, sem defeito e tampa ausente, e estamos anotando esse dataset no Roboflow para treinar o modelo customizado. Faltam a outra classe (corpo deformado), o treino do modelo final, e a camada de alerta local e MQTT, que ainda não tem código escrito.
->>>>>>> Stashed changes
+O diretório deve conter `docker-compose.yml`, `app/`, `models/` e `scripts/detector_garrafas.py`.
+
+### 2. Baixar o modelo com DVC
+
+Instale o DVC caso ele ainda não esteja disponível e faça o pull do artefato:
+
+```bash
+python3 -m pip install dvc
+dvc pull models/yolo-epi.pt.dvc
+```
+
+Confirme que o peso foi materializado:
+
+```bash
+ls -lh models/yolo-epi.pt
+```
+
+O arquivo deve existir antes da subida dos containers. O acesso ao remoto DVC configurado para o projeto também é necessário; sem ele, o ponteiro `.dvc` não consegue baixar o modelo.
+
+### 3. Subir a API e a câmera
+
+Na máquina que possui a câmera, execute:
+
+```bash
+docker compose up -d --build
+docker compose ps
+```
+
+O primeiro build instala Python, PyTorch CPU, Ultralytics, OpenCV e as ferramentas de câmera. O serviço `yolo-api` fica disponível na porta `8000`; o stream, quando utilizado, fica na porta `5000`.
+
+Valide o serviço e o modelo:
+
+```bash
+curl -f http://localhost:8000/health
+curl -X POST "http://localhost:8000/predict/camera?model_name=yolo-epi.pt&confidence=0.3"
+```
+
+O primeiro comando deve retornar JSON semelhante a:
+
+```json
+{"status":"ok","model_loaded":true,"model_name":"yolo-epi.pt"}
+```
+
+O segundo deve retornar um JSON com `detections`, `inference_ms`, `model_used`, `image_width` e `image_height`. `detections` pode ser uma lista vazia quando não houver garrafa ou anomalia no campo de visão; isso não indica falha da API.
+
+Para acompanhar logs e encerrar os serviços:
+
+```bash
+docker compose logs -f yolo-api
+docker compose down
+```
+
+### 4. Preparar o equipamento do detector
+
+O detector pode ser executado no próprio Raspberry Pi ou em outro equipamento Linux ligado ao circuito. Ele precisa alcançar o endereço da API e ter acesso ao GPIO 18. No ambiente Python do equipamento do detector:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install requests gpiozero
+```
+
+O `gpiozero` considera a numeração BCM; portanto, `GPIO_PIN = 18` significa o GPIO BCM 18, e não necessariamente o pino físico 18 do header. Ligue LED e buzzer com resistor e/ou driver adequado ao circuito conforme o diagrama elétrico.
+
+
+
+
+### 5. Configurar o endereço da API
+
+Abra `scripts/detector_garrafas.py` e ajuste:
+
+```python
+API_URL = "http://ENDERECO_DA_MAQUINA_DA_API:8000/predict/camera"
+```
+
+O valor versionado atualmente aponta para `http://100.78.45.107:8000/predict/camera`. Esse endereço só funcionará se a API estiver realmente acessível nesse IP, por exemplo, pela rede configurada do projeto. Se API e detector estiverem no mesmo Raspberry Pi, use `http://127.0.0.1:8000/predict/camera`.
+
+Antes de iniciar o loop, teste o mesmo host pelo equipamento do detector:
+
+```bash
+curl -f http://ENDERECO_DA_MAQUINA_DA_API:8000/health
+```
+
+### 6. Executar `detector_garrafas.py`
+
+Com a câmera, a API e o circuito prontos:
+
+```bash
+source .venv/bin/activate
+python scripts/detector_garrafas.py
+```
+
+O programa permanece em execução até `Ctrl+C`. A cada ciclo ele chama a API, verifica as detecções das três classes-alvo e aplica um cooldown de `1.0` segundo entre alarmes. O LED e o buzzer ficam ligados por `0.5` segundo quando uma detecção válida dispara o alarme.
+
+## Resultado esperado
+
+Ao iniciar corretamente, o terminal deve mostrar mensagens equivalentes a:
+
+```text
+Consultando http://...:8000/predict/camera
+Modelo: yolo-epi.pt | confiança mínima: 0.3
+Classes gatilho: {'Garrafa amassada', 'Tampa incorreta', 'Tampa ausente'}
+Alarme: 0.5s ON | cooldown 1.0s
+Ctrl+C para sair.
+```
+
+Com uma cena sem anomalia, o detector continua consultando a API sem imprimir alarme e mantém o GPIO desligado. Ao apresentar uma garrafa correspondente a uma classe-alvo e com confiança igual ou maior que `0.3`, deve aparecer uma linha semelhante a:
+
+```text
+[... ] 🚨 Tampa ausente(0.87) | alarme ON por 0.5s
+```
+
+Nesse momento, o LED e o buzzer devem ligar por meio segundo. Ao pressionar `Ctrl+C`, o programa deve mostrar `Encerrado.` e `Saída GPIO desligada. Tchau!`, deixando as saídas desligadas.
+
+Erros com prefixo `[api] erro:` indicam que o detector iniciou, mas não conseguiu consultar a API ou interpretar sua resposta. Nesse caso, verifique o IP, a porta `8000`, a conectividade, o estado do container e a câmera. Se a API estiver respondendo, mas não houver alarme, confirme iluminação, enquadramento, classe detectada e o limiar de confiança.
+
+## Desenvolvimento e validação
+
+Os testes ficam em `tests/` e o lint é configurado em `ruff.toml`. Com as dependências de desenvolvimento instaladas, podem ser executados com:
+
+```bash
+pytest
+ruff check .
+```
+
+O deploy automatizado usa GitHub Actions e `scripts/deploy.sh`, que atualiza a imagem, executa o `dvc pull`, sobe os serviços e valida o endpoint `/health` antes de concluir.
