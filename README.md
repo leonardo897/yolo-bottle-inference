@@ -37,6 +37,7 @@ O modelo utilizado pela execução final é `yolo-epi.pt`. O arquivo não fica a
 │   ├── model.py                # carregamento e cache dos modelos
 │   └── requirements.txt        # dependências da API
 ├── client/                     # cliente de testes da API
+├── dataset/                    # conjunto de imagens de treino, teste e validação
 ├── models/
 │   └── yolo-epi.pt.dvc         # ponteiro DVC do modelo final
 ├── preprocessing/              # pré-processamento e ajuste das caixas
