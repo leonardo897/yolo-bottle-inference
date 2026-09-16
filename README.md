@@ -170,7 +170,6 @@ curl -f http://ENDERECO_DA_MAQUINA_DA_API:8000/health
 Com a câmera, a API e o circuito prontos:
 
 ```bash
-source .venv/bin/activate
 python scripts/detector_garrafas.py
 ```
 
